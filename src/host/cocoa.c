@@ -1025,10 +1025,10 @@ int32_t moonapp_read_back(void *raw, int32_t window, uint8_t *out, int32_t cap) 
   uint8_t *data = (uint8_t *)SEND0(void *, rep, "bitmapData");
   NSInteger row = (NSInteger)(intptr_t)SEND0(NSInteger, rep, "bytesPerRow");
   if (data == NULL || row <= 0) return -1;
-  /* The bitmap holds four samples a pixel with red first; a frame holds blue
-   * first and an alpha of its own. */
+  /* The bitmap holds four samples a pixel with red first, and its last row is
+   * the top of the view; a frame is blue first with the top row first. */
   for (int32_t y = 0; y < height; y++) {
-    const uint8_t *from = data + (size_t)y * (size_t)row;
+    const uint8_t *from = data + (size_t)(height - 1 - y) * (size_t)row;
     uint8_t *to = out + (size_t)y * (size_t)width * 4;
     for (int32_t x = 0; x < width; x++) {
       to[x * 4] = from[x * 4 + 2];
