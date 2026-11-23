@@ -147,6 +147,7 @@ test "a frame put on a window reads back from it" {
   println("window is \{rig.width} by \{rig.height}, scale \{scale}")
   assert_eq(rig.width > 0 && rig.height > 0, true)
   let frame = quadrant_frame(rig.width, rig.height)
+  println("source: \{frame.get(rig.width / 4, rig.height / 4)} \{frame.get(rig.width * 3 / 4, rig.height / 4)}")
   rig.window.present(frame)
   // Wayland has no request for a window to read itself back; the backend says
   // so rather than inventing one.
@@ -166,6 +167,8 @@ test "a frame put on a window reads back from it" {
       rig.height / 2 * y + rig.height / 4,
     )
   }
+  println("quarters: \{quarter(0, 0)} \{quarter(1, 0)} \{quarter(0, 1)} \{quarter(1, 1)}")
+  println("corners: \{back.get(0, 0)} \{back.get(rig.width - 1, 0)} \{back.get(0, rig.height - 1)} \{back.get(rig.width - 1, rig.height - 1)}")
   assert_eq(quarter(0, 0), @moonapp.Rgba::solid(255, 0, 0))
   assert_eq(quarter(1, 0), @moonapp.Rgba::solid(0, 255, 0))
   assert_eq(quarter(0, 1), @moonapp.Rgba::solid(0, 0, 255))
