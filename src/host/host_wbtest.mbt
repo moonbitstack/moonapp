@@ -103,6 +103,10 @@ fn expect_event(
 /// arrived and that they arrived the right way up and in the right order.
 fn quadrant_frame(width : Int32, height : Int32) -> @moonapp.Frame {
   let frame = @moonapp.Frame::new(width, height)
+  /* The frame decides how big it is: a size the desktop would not grant must not
+   * paint outside the buffer it allocated. */
+  let width = frame.width
+  let height = frame.height
   let half_width = width / 2
   let half_height = height / 2
   frame.fill_rect(
@@ -139,6 +143,8 @@ fn quadrant_frame(width : Int32, height : Int32) -> @moonapp.Frame {
 ///|
 test "a frame put on a window reads back from it" {
   guard rig(@moonapp.window_config) is Some(rig) else { return }
+  println("window is \{rig.width} by \{rig.height}, scale \{rig.window.scale()}")
+  assert_eq(rig.width > 0 && rig.height > 0, true)
   let frame = quadrant_frame(rig.width, rig.height)
   rig.window.present(frame)
   // Wayland has no request for a window to read itself back; the backend says
