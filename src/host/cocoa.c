@@ -186,7 +186,6 @@ typedef struct moonapp_win {
   struct moonapp_host *host;
   id window;
   id view;
-  id layer;
   CGImageRef image;
   uint8_t *pixels;
   int32_t bytes;
@@ -714,10 +713,8 @@ int32_t moonapp_open(void *raw, const char *title, int32_t title_len,
   win->view = view;
   /* A view arrives with no size; the window's content area is the size it has. */
   ((void(*)(id, SEL, CGRect))p_objc_msgSend)(view, node("setFrame:"), content);
-  SEND1(void, view, "setWantsLayer:", (void *)1);
   SEND1(void, window, "setContentView:", view);
   SEND1(void, window, "makeFirstResponder:", view);
-  win->layer = SEND0(id, view, "layer");
   SEND1(void, window, "setReleasedWhenClosed:", (void *)0);
   if (flags & MOONAPP_FLAG_TRANSPARENT) {
     SEND1(void, window, "setOpaque:", (void *)0);
@@ -963,9 +960,17 @@ int32_t moonapp_present(void *raw, int32_t window, uint8_t *bgra, int32_t width,
   if (win == NULL || bgra == NULL || width <= 0 || height <= 0) return 0;
   if (!load_cocoa()) return 0;
   size_t bytes = (size_t)width * (size_t)height * 4;
-  /* CoreGraphics copies what the provider hands it when told to, so the buffer
-   * the frame came in is enough. */
-  CGDataProviderRef provider = p_CGDataProviderCreateWithData(NULL, bgra, bytes, NULL);
+  /* The image keeps the pixels it was built from, so they are kept here, for as
+   * long as the window lives, rather than borrowed from the caller's frame. */
+  if (win->bytes < (int32_t)bytes) {
+    uint8_t *grown = (uint8_t *)realloc(win->pixels, bytes);
+    if (grown == NULL) return 0;
+    win->pixels = grown;
+    win->bytes = (int32_t)bytes;
+  }
+  memcpy(win->pixels, bgra, bytes);
+  CGDataProviderRef provider =
+      p_CGDataProviderCreateWithData(NULL, win->pixels, bytes, NULL);
   if (provider == NULL) return 0;
   CGImageRef image = p_CGImageCreate(
       (size_t)width, (size_t)height, 8, 32, (size_t)stride,
@@ -975,8 +980,7 @@ int32_t moonapp_present(void *raw, int32_t window, uint8_t *bgra, int32_t width,
   if (image == NULL) return 0;
   release_image(win);
   win->image = image;
-  if (win->layer != NULL) SEND1(void, win->layer, "setContents:", image);
-  if (win->view != NULL) SEND0(void, win->view, "setNeedsDisplay:");
+  if (win->view != NULL) SEND1(void, win->view, "setNeedsDisplay:", (void *)1);
   return 1;
 }
 
@@ -990,6 +994,7 @@ int32_t moonapp_read_back(void *raw, int32_t window, uint8_t *out, int32_t cap) 
   if (width <= 0 || height <= 0) return -1;
   int32_t need = width * height * 4;
   if (out == NULL || cap < need) return need;
+  SEND0(void, win->view, "display");
   CGRect bounds = send_rect0(win->view, "bounds");
   id rep = ((id(*)(id, SEL, CGRect))p_objc_msgSend)(
       win->view, node("bitmapImageRepForCachingDisplayInRect:"), bounds);
