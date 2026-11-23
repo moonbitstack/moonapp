@@ -953,11 +953,14 @@ int32_t moonapp_read_back(void *raw, int32_t window, uint8_t *out, int32_t cap) 
   CGRect bounds = send_rect0(win->view, "bounds");
   id rep = ((id(*)(id, SEL, CGRect))p_objc_msgSend)(
       win->view, node("bitmapImageRepForCachingDisplayInRect:"), bounds);
+  fprintf(stderr, "[dbg] rep=%p bounds=%.0fx%.0f\n", (void *)rep,
+          bounds.size.width, bounds.size.height);
   if (rep == NULL) return -1;
   ((void(*)(id, SEL, CGRect, id))p_objc_msgSend)(
       win->view, node("cacheDisplayInRect:toBitmapImageRep:"), bounds, rep);
   uint8_t *data = (uint8_t *)SEND0(void *, rep, "bitmapData");
   NSInteger row = (NSInteger)(intptr_t)SEND0(NSInteger, rep, "bytesPerRow");
+  fprintf(stderr, "[dbg] data=%p row=%ld\n", (void *)data, (long)row);
   if (data == NULL || row <= 0) return -1;
   /* The bitmap is premultiplied BGRA with the first row at the top, once the
    * view is flipped, which this one is. */
