@@ -994,25 +994,48 @@ int32_t moonapp_read_back(void *raw, int32_t window, uint8_t *out, int32_t cap) 
   if (width <= 0 || height <= 0) return -1;
   int32_t need = width * height * 4;
   if (out == NULL || cap < need) return need;
-  SEND0(void, win->view, "display");
-  CGRect bounds = send_rect0(win->view, "bounds");
-  id rep = ((id(*)(id, SEL, CGRect))p_objc_msgSend)(
-      win->view, node("bitmapImageRepForCachingDisplayInRect:"), bounds);
-  fprintf(stderr, "[dbg] rep=%p bounds=%.0fx%.0f\n", (void *)rep,
-          bounds.size.width, bounds.size.height);
+  /* A bitmap for the view to draw itself into, and the view's own drawing run
+   * against it: the same code that paints the window, into a context the caller
+   * can read. This does not depend on the window being on a screen, which a
+   * machine running tests with nobody in front of it may not have. */
+  id alloc = SEND0(id, p_objc_getClass("NSBitmapImageRep"), "alloc");
+  if (alloc == NULL) return -1;
+  id rep = ((id(*)(id, SEL, void *, NSInteger, NSInteger, NSInteger, NSInteger,
+                    BOOL_, BOOL_, id, NSInteger, NSInteger))p_objc_msgSend)(
+      alloc,
+      node("initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:"
+           "samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bytesPerRow:"
+           "bitsPerPixel:"),
+      NULL, (NSInteger)width, (NSInteger)height, 8, 4, 1, 0,
+      make_string("NSCalibratedRGBColorSpace", 25), 0, 0);
   if (rep == NULL) return -1;
-  ((void(*)(id, SEL, CGRect, id))p_objc_msgSend)(
-      win->view, node("cacheDisplayInRect:toBitmapImageRep:"), bounds, rep);
+  id context_class = p_objc_getClass("NSGraphicsContext");
+  id context = ((id(*)(id, SEL, id))p_objc_msgSend)(
+      context_class, node("graphicsContextWithBitmapImageRep:"), rep);
+  if (context == NULL) return -1;
+  ((void(*)(id, SEL))p_objc_msgSend)(context_class, node("saveGraphicsState"));
+  ((void(*)(id, SEL, id))p_objc_msgSend)(
+      context_class, node("setCurrentContext:"), context);
+  CGRect bounds = { { 0, 0 },
+                    { (double)width / win->scale, (double)height / win->scale } };
+  ((void(*)(id, SEL, CGRect))p_objc_msgSend)(win->view, node("drawRect:"),
+                                             bounds);
+  ((void(*)(id, SEL))p_objc_msgSend)(context_class,
+                                     node("restoreGraphicsState"));
   uint8_t *data = (uint8_t *)SEND0(void *, rep, "bitmapData");
   NSInteger row = (NSInteger)(intptr_t)SEND0(NSInteger, rep, "bytesPerRow");
-  fprintf(stderr, "[dbg] data=%p row=%ld\n", (void *)data, (long)row);
   if (data == NULL || row <= 0) return -1;
-  /* The bitmap is premultiplied BGRA with the first row at the top, once the
-   * view is flipped, which this one is. */
-  int32_t copy = width * 4;
+  /* The bitmap holds four samples a pixel with red first; a frame holds blue
+   * first and an alpha of its own. */
   for (int32_t y = 0; y < height; y++) {
-    memcpy(out + (size_t)y * (size_t)copy, data + (size_t)y * (size_t)row,
-           (size_t)copy);
+    const uint8_t *from = data + (size_t)y * (size_t)row;
+    uint8_t *to = out + (size_t)y * (size_t)width * 4;
+    for (int32_t x = 0; x < width; x++) {
+      to[x * 4] = from[x * 4 + 2];
+      to[x * 4 + 1] = from[x * 4 + 1];
+      to[x * 4 + 2] = from[x * 4];
+      to[x * 4 + 3] = 0xFF;
+    }
   }
   return need;
 }
