@@ -106,8 +106,10 @@ backend converts that to the byte order its desktop wants on the way out, and
 who writes a GPU read-back into a frame uses the same two functions.
 
 `Window::read_back` reads the window as a frame, which is what the tests compare
-against what was drawn. Wayland has no such request in its protocol and answers
-`AppError::Unavailable` there.
+against what was drawn. Win32 and X11 ask the desktop for the window's content;
+macOS keeps what a window shows to itself, so there the answer is the pixels the
+window was given, which are the ones a person sees. Wayland has no such request
+in its protocol and answers `AppError::Unavailable` there.
 
 ## Screens with more pixels
 

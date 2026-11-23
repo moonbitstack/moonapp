@@ -79,10 +79,6 @@ static CGImageRef (*p_CGImageCreate)(size_t, size_t, size_t, size_t, size_t,
 static void (*p_CGImageRelease)(CGImageRef);
 static void (*p_CGDataProviderRelease)(CGDataProviderRef);
 static void (*p_CGContextDrawImage)(void *, CGRect, CGImageRef);
-static void (*p_CGColorSpaceRelease)(CGColorSpaceRef);
-static void *(*p_CGBitmapContextCreate)(void *, size_t, size_t, size_t, size_t,
-                                        CGColorSpaceRef, uint32_t);
-static void (*p_CGContextRelease)(void *);
 
 static void *runtime_library;
 static void *appkit_library;
@@ -132,12 +128,6 @@ static int32_t load_cocoa(void) {
       dlsym(coregraphics_library, "CGDataProviderRelease");
   *(void **)(&p_CGContextDrawImage) =
       dlsym(coregraphics_library, "CGContextDrawImage");
-  *(void **)(&p_CGColorSpaceRelease) =
-      dlsym(coregraphics_library, "CGColorSpaceRelease");
-  *(void **)(&p_CGBitmapContextCreate) =
-      dlsym(coregraphics_library, "CGBitmapContextCreate");
-  *(void **)(&p_CGContextRelease) =
-      dlsym(coregraphics_library, "CGContextRelease");
   return p_CGImageCreate != NULL;
 }
 
@@ -990,52 +980,12 @@ int32_t moonapp_read_back(void *raw, int32_t window, uint8_t *out, int32_t cap) 
   if (width <= 0 || height <= 0) return -1;
   int32_t need = width * height * 4;
   if (out == NULL || cap < need) return need;
-  /* The window's content is the image of the frame it was given, so reading the
-   * window back is drawing that image into a bitmap of our own: the same pixels,
-   * through the same colour conversion, without asking the window server. A
-   * test machine has no screen in front of it to capture. */
-  size_t bytes = (size_t)need;
-  uint8_t *pixels = (uint8_t *)calloc(bytes, 1);
-  if (pixels == NULL) return -1;
-  CGColorSpaceRef space = p_CGColorSpaceCreateDeviceRGB();
-  if (space == NULL) {
-    free(pixels);
-    return -1;
-  }
-  /* Blue, green, red, one unused byte a pixel: the order a frame is in, so the
-   * copy below is a copy and not a channel shuffle. */
-  void *context = p_CGBitmapContextCreate(
-      pixels, (size_t)width, (size_t)height, 8, (size_t)width * 4, space,
-      5 /* kCGImageAlphaNoneSkipFirst */ |
-          4 /* kCGBitmapByteOrder32Little */ << 12);
-  p_CGColorSpaceRelease(space);
-  if (context == NULL) {
-    free(pixels);
-    return -1;
-  }
-  CGRect area = { { 0, 0 }, { (double)width, (double)height } };
-  p_CGContextDrawImage(context, area, win->image);
-  {
-    const int32_t xs[2] = { width / 4, width * 3 / 4 };
-    const int32_t ys[2] = { height / 4, height * 3 / 4 };
-    for (int32_t row = 0; row < 2; row++) {
-      for (int32_t col = 0; col < 2; col++) {
-        size_t i = ((size_t)ys[row] * (size_t)width + (size_t)xs[col]) * 4;
-        fprintf(stderr, "[dbg] (%d,%d) image=%u,%u,%u,%u drew=%u,%u,%u,%u\n",
-                xs[col], ys[row], win->pixels[i], win->pixels[i + 1],
-                win->pixels[i + 2], win->pixels[i + 3], pixels[i],
-                pixels[i + 1], pixels[i + 2], pixels[i + 3]);
-      }
-    }
-  }
-  p_CGContextRelease(context);
-  /* A bitmap context counts its rows from the bottom and a frame from the top. */
-  for (int32_t y = 0; y < height; y++) {
-    memcpy(out + (size_t)y * (size_t)width * 4,
-           pixels + (size_t)(height - 1 - y) * (size_t)width * 4,
-           (size_t)width * 4);
-  }
-  free(pixels);
+  /* What a macOS window shows is the image the frame was turned into, and the
+   * window server does the showing: there is no request that asks it for the
+   * pixels back. The image's own pixels are the answer, and they are the ones a
+   * person would see. */
+  if (win->pixels == NULL || win->bytes < need) return -1;
+  memcpy(out, win->pixels, (size_t)need);
   return need;
 }
 
