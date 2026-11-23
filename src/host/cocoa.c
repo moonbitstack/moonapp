@@ -78,11 +78,11 @@ static CGImageRef (*p_CGImageCreate)(size_t, size_t, size_t, size_t, size_t,
                                      int);
 static void (*p_CGImageRelease)(CGImageRef);
 static void (*p_CGDataProviderRelease)(CGDataProviderRef);
-static void (*p_CGContextSaveGState)(void *);
-static void (*p_CGContextRestoreGState)(void *);
-static void (*p_CGContextTranslateCTM)(void *, double, double);
-static void (*p_CGContextScaleCTM)(void *, double, double);
 static void (*p_CGContextDrawImage)(void *, CGRect, CGImageRef);
+static void (*p_CGColorSpaceRelease)(CGColorSpaceRef);
+static void *(*p_CGBitmapContextCreate)(void *, size_t, size_t, size_t, size_t,
+                                        CGColorSpaceRef, uint32_t);
+static void (*p_CGContextRelease)(void *);
 
 static void *runtime_library;
 static void *appkit_library;
@@ -130,16 +130,14 @@ static int32_t load_cocoa(void) {
   *(void **)(&p_CGImageRelease) = dlsym(coregraphics_library, "CGImageRelease");
   *(void **)(&p_CGDataProviderRelease) =
       dlsym(coregraphics_library, "CGDataProviderRelease");
-  *(void **)(&p_CGContextSaveGState) =
-      dlsym(coregraphics_library, "CGContextSaveGState");
-  *(void **)(&p_CGContextRestoreGState) =
-      dlsym(coregraphics_library, "CGContextRestoreGState");
-  *(void **)(&p_CGContextTranslateCTM) =
-      dlsym(coregraphics_library, "CGContextTranslateCTM");
-  *(void **)(&p_CGContextScaleCTM) =
-      dlsym(coregraphics_library, "CGContextScaleCTM");
   *(void **)(&p_CGContextDrawImage) =
       dlsym(coregraphics_library, "CGContextDrawImage");
+  *(void **)(&p_CGColorSpaceRelease) =
+      dlsym(coregraphics_library, "CGColorSpaceRelease");
+  *(void **)(&p_CGBitmapContextCreate) =
+      dlsym(coregraphics_library, "CGBitmapContextCreate");
+  *(void **)(&p_CGContextRelease) =
+      dlsym(coregraphics_library, "CGContextRelease");
   return p_CGImageCreate != NULL;
 }
 
@@ -281,13 +279,9 @@ static void view_draw_rect(id self, SEL _cmd, CGRect rect) {
   void *cg = SEND0(void *, context, "CGContext");
   if (cg == NULL) return;
   CGRect bounds = send_rect0(self, "bounds");
-  /* The layer shows the frame on screen; drawing it here is what puts it in the
-   * view's own content, which is what a capture of the view reads. */
-  p_CGContextSaveGState(cg);
-  p_CGContextTranslateCTM(cg, 0, bounds.size.height);
-  p_CGContextScaleCTM(cg, 1, -1);
+  /* The view is not flipped, so its context counts rows from the bottom the way
+   * a drawing context does and the image goes in as it is. */
   p_CGContextDrawImage(cg, bounds, win->image);
-  p_CGContextRestoreGState(cg);
 }
 
 static BOOL_ view_is_flipped(id self, SEL _cmd) {
@@ -974,7 +968,9 @@ int32_t moonapp_present(void *raw, int32_t window, uint8_t *bgra, int32_t width,
   if (provider == NULL) return 0;
   CGImageRef image = p_CGImageCreate(
       (size_t)width, (size_t)height, 8, 32, (size_t)stride,
-      p_CGColorSpaceCreateDeviceRGB(), 2 /* kCGImageAlphaPremultipliedFirst */,
+      p_CGColorSpaceCreateDeviceRGB(),
+      2 /* kCGImageAlphaPremultipliedFirst */ |
+          4 /* kCGBitmapByteOrder32Little */ << 12,
       provider, NULL, 0, 0);
   p_CGDataProviderRelease(provider);
   if (image == NULL) return 0;
@@ -994,49 +990,39 @@ int32_t moonapp_read_back(void *raw, int32_t window, uint8_t *out, int32_t cap) 
   if (width <= 0 || height <= 0) return -1;
   int32_t need = width * height * 4;
   if (out == NULL || cap < need) return need;
-  /* A bitmap for the view to draw itself into, and the view's own drawing run
-   * against it: the same code that paints the window, into a context the caller
-   * can read. This does not depend on the window being on a screen, which a
-   * machine running tests with nobody in front of it may not have. */
-  id alloc = SEND0(id, p_objc_getClass("NSBitmapImageRep"), "alloc");
-  if (alloc == NULL) return -1;
-  id rep = ((id(*)(id, SEL, void *, NSInteger, NSInteger, NSInteger, NSInteger,
-                    BOOL_, BOOL_, id, NSInteger, NSInteger))p_objc_msgSend)(
-      alloc,
-      node("initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:"
-           "samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bytesPerRow:"
-           "bitsPerPixel:"),
-      NULL, (NSInteger)width, (NSInteger)height, 8, 4, 1, 0,
-      make_string("NSCalibratedRGBColorSpace", 25), 0, 0);
-  if (rep == NULL) return -1;
-  id context_class = p_objc_getClass("NSGraphicsContext");
-  id context = ((id(*)(id, SEL, id))p_objc_msgSend)(
-      context_class, node("graphicsContextWithBitmapImageRep:"), rep);
-  if (context == NULL) return -1;
-  ((void(*)(id, SEL))p_objc_msgSend)(context_class, node("saveGraphicsState"));
-  ((void(*)(id, SEL, id))p_objc_msgSend)(
-      context_class, node("setCurrentContext:"), context);
-  CGRect bounds = { { 0, 0 },
-                    { (double)width / win->scale, (double)height / win->scale } };
-  ((void(*)(id, SEL, CGRect))p_objc_msgSend)(win->view, node("drawRect:"),
-                                             bounds);
-  ((void(*)(id, SEL))p_objc_msgSend)(context_class,
-                                     node("restoreGraphicsState"));
-  uint8_t *data = (uint8_t *)SEND0(void *, rep, "bitmapData");
-  NSInteger row = (NSInteger)(intptr_t)SEND0(NSInteger, rep, "bytesPerRow");
-  if (data == NULL || row <= 0) return -1;
-  /* The bitmap holds four samples a pixel with red first, and its last row is
-   * the top of the view; a frame is blue first with the top row first. */
-  for (int32_t y = 0; y < height; y++) {
-    const uint8_t *from = data + (size_t)(height - 1 - y) * (size_t)row;
-    uint8_t *to = out + (size_t)y * (size_t)width * 4;
-    for (int32_t x = 0; x < width; x++) {
-      to[x * 4] = from[x * 4 + 2];
-      to[x * 4 + 1] = from[x * 4 + 1];
-      to[x * 4 + 2] = from[x * 4];
-      to[x * 4 + 3] = 0xFF;
-    }
+  /* The window's content is the image of the frame it was given, so reading the
+   * window back is drawing that image into a bitmap of our own: the same pixels,
+   * through the same colour conversion, without asking the window server. A
+   * test machine has no screen in front of it to capture. */
+  size_t bytes = (size_t)need;
+  uint8_t *pixels = (uint8_t *)calloc(bytes, 1);
+  if (pixels == NULL) return -1;
+  CGColorSpaceRef space = p_CGColorSpaceCreateDeviceRGB();
+  if (space == NULL) {
+    free(pixels);
+    return -1;
   }
+  /* Blue, green, red, one unused byte a pixel: the order a frame is in, so the
+   * copy below is a copy and not a channel shuffle. */
+  void *context = p_CGBitmapContextCreate(
+      pixels, (size_t)width, (size_t)height, 8, (size_t)width * 4, space,
+      5 /* kCGImageAlphaNoneSkipFirst */ |
+          4 /* kCGBitmapByteOrder32Little */ << 12);
+  p_CGColorSpaceRelease(space);
+  if (context == NULL) {
+    free(pixels);
+    return -1;
+  }
+  CGRect area = { { 0, 0 }, { (double)width, (double)height } };
+  p_CGContextDrawImage(context, area, win->image);
+  p_CGContextRelease(context);
+  /* A bitmap context counts its rows from the bottom and a frame from the top. */
+  for (int32_t y = 0; y < height; y++) {
+    memcpy(out + (size_t)y * (size_t)width * 4,
+           pixels + (size_t)(height - 1 - y) * (size_t)width * 4,
+           (size_t)width * 4);
+  }
+  free(pixels);
   return need;
 }
 
