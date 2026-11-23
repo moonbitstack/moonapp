@@ -1,66 +1,176 @@
-# CHANGE-ME
+# moonapp
 
-One sentence saying what this is.
+Native windows and an event loop for a desktop: open a window, hand it frames of
+RGBA pixels, and read back the keys, the pointer, the wheel and the composed text
+that come out of it. The system interfaces are called through C stubs — Win32 on
+Windows, Cocoa through the Objective-C runtime on macOS, Wayland and X11 on
+Linux — so no third-party window library is involved and the same code runs on
+all three.
 
-```moonbit
-println(@CHANGE-ME.greet("moonbit"))
-```
+The package draws nothing. A frame is a rectangle of pixels a renderer produced;
+putting it on screen and turning desktop input into events is what this library
+is for.
 
-Run `moon run src/examples/tour` for the whole surface in one go.
-
-## Starting from this template
-
-1. `gh repo create moonbitstack/<name> --template moonbitstack/moonkit --public`
-2. Replace `CHANGE-ME` everywhere: `moon.mod` (name and repository), the
-   `moon.pkg` files and sources that import the library, and this file's title.
-3. The library is the root package in `src/`, so users write `@<name>.f`. Split it
-   into subpackages named after what they do (`base64/`, `sha2/`, `jwt/`) only
-   where a user would want one without the rest. Delete `src/cmd/` if the
-   repository ships no binary.
-4. Fill in `keywords` and `description` in `moon.mod`. The description is what
-   mooncakes shows, so it says what the package is and what it is not.
-5. Write the specification link into every `moon.pkg`.
-6. Rename `docs/skills/CHANGE-ME/` to the library's name and write its `SKILL.md`:
-   how to add the library, the common tasks with code that compiles against the
-   published version, and the rules that catch people out.
-
-## What is here and what is not
-
-| Carried | Why |
-|:--|:--|
-| `.github/workflows/` | GitHub does not inherit workflows; every repository needs its own copy |
-| `moon.mod`, `src/`, `src/cmd/main/`, `src/examples/tour/` | Sources under `src/` so the root holds only entry points; the library is the root package, the binary and the examples sit beside it |
-| `docs/skills/` | The Agent Skill for the library, released with each version and carried inside the module |
-| `.gitignore`, `.moonignore` | The second one exists because `.gitignore`'s `!.git*` would otherwise pull the whole object database into a published tarball |
-| `LICENSE` | Apache-2.0, the same across the organisation |
-
-**Issue and pull-request templates are not here.** The organisation's `.github`
-repository supplies them to every repository that has none of its own; a copy
-here would shadow that one and then drift from it. A repository adds its own
-only when it needs something the organisation's does not cover.
-
-## The gate
-
-Every commit passes this, with each exit code seen to be zero:
+## Install
 
 ```bash
-moon clean && moon fmt && moon check --target all --deny-warn \
-  && moon build --target all && moon test --target all
+moon add moonbitstack/moonapp
 ```
 
-Before a release, `moon info --target all && git diff --exit-code` as well: the
-generated interface is checked in, and a difference means the interface moved
-without anyone saying so.
+The window is native code, so it lives in `moonbitstack/moonapp/host`. The frames,
+keys, events and scale arithmetic are in the root package and build on every
+target, including the browser ones, which is what lets a layout be tested
+without a desktop.
 
-## Releasing
+```moonbit
+import {
+  "moonbitstack/moonapp" @moonapp,
+  "moonbitstack/moonapp/host" @host,
+}
+```
 
-Push a signed tag `v<version>`. `release.yml` runs the tests first and publishes
-only if they pass and the organisation variable `MOONCAKES_PUBLISH` is `true`.
-Each skill under `docs/skills/` then goes to [mooncakes.io/skills](https://mooncakes.io/skills)
-at the same version, in a job of its own so that rerunning a failure does not
-publish the module twice. Releases cannot be overwritten or deleted, so a mistake
-means the next version. The major version stays at 0.
+## A window with something in it
 
-## Licence
+```moonbit native
+fn run() -> Unit raise @moonapp.AppError {
+  let app = @host.App::new()
+  let window = app.open()
+  let (width, height) = window.size()
+  let frame = @moonapp.Frame::new(width, height)
+  frame.fill(@moonapp.Rgba::solid(20, 24, 32))
+  frame.fill_rect(40, 40, 160, 90, @moonapp.Rgba::solid(220, 90, 60))
+  window.present(frame)
+  window.close()
+  app.close()
+}
+```
 
-Apache-2.0.
+`App::new` asks the desktop for a connection, `App::open` opens a window of the
+size in `@moonapp.window_config` — 800 by 600 logical pixels by default — and
+`Window::present` puts a frame on it. A frame that is not the size of the client
+area is clipped; ask `Window::size` for the size that fits.
+
+## Reading the desktop
+
+One window, one loop, and every event named the same way on every desktop:
+
+```moonbit native
+fn pump(app : @host.App, window : @host.Window) -> Unit {
+  while !app.is_shutdown() {
+    match app.wait(timeout=16) {
+      Some((_, @moonapp.CloseRequested)) => window.close()
+      Some((_, @moonapp.KeyDown(key))) => {
+        if key.key == @moonapp.Key::Escape {
+          window.close()
+        }
+      }
+      Some((_, @moonapp.Text(text))) => println(text)
+      Some((_, @moonapp.Resized(width, height))) =>
+        println("\{width} by \{height}")
+      _ => ()
+    }
+  }
+}
+```
+
+`App::wait` blocks for at most the given number of milliseconds and returns the
+window the event belongs to with the event itself; `App::poll` looks once and
+returns nothing when the queue is empty. Sizes and pointer positions are physical
+pixels, the size a frame is drawn in.
+
+A key press and the text it produces are separate events. `KeyDown` says which
+key, wherever the layout has put it; `Text` says what to insert, after the layout
+and any input method have had their say, so a shortcut binds to `Key` and an
+editor inserts `Text`.
+
+## Frames
+
+```moonbit
+fn paint() -> @moonapp.Frame {
+  let frame = @moonapp.Frame::new(64, 48)
+  frame.fill(@moonapp.Rgba::solid(12, 12, 12))
+  for y in 0..<48 {
+    for x in 0..<64 {
+      let red = (x * 4).to_double() / 64.0
+      let alpha = (y * 255 / 47)
+      frame.set(x, y, @moonapp.Rgba::new((red * 255.0).to_int(), 200, 80, alpha))
+    }
+  }
+  frame
+}
+```
+
+A `Frame` holds straight alpha, eight bits a channel, first row at the top. Each
+backend converts that to the byte order its desktop wants on the way out, and
+`Frame::to_host_order` and `Frame::from_host_order` are that conversion: a caller
+who writes a GPU read-back into a frame uses the same two functions.
+
+`Window::read_back` reads the window as a frame, which is what the tests compare
+against what was drawn. Wayland has no such request in its protocol and answers
+`AppError::Unavailable` there.
+
+## Screens with more pixels
+
+```moonbit native
+fn describe(window : @host.Window) -> String {
+  let (width, height) = window.size()
+  let scale = window.scale()
+  let logical_width = @moonapp.to_logical(width.to_double(), scale).to_int()
+  "\{width} by \{height} physical, \{logical_width} by \{height} logical, scale \{scale}"
+}
+```
+
+A configuration asks for logical pixels; a frame is drawn in physical ones. A
+screen at 144 dots per inch reports 1.5, and a window asked for as 800 by 600
+gets 1200 by 900 pixels to draw in. `Event::ScaleChanged` arrives when the window
+moves to a screen with another factor, and the frame is laid out again at the new
+size.
+
+## The desktop behind the window
+
+| | Windows | macOS | Linux |
+|:--|:--|:--|:--|
+| Window | `CreateWindowExW` | `NSWindow` | `xdg_surface`, X11 window |
+| Frame | DIB section and `BitBlt` | `CALayer` contents | `wl_shm`, `XPutImage` |
+| Input | window messages | `NSEvent` | `wl_keyboard`, X11 events |
+| Composed text | `WM_IME_COMPOSITION` | input method of the text system | XIM |
+| Clipboard | `CF_UNICODETEXT` | `NSPasteboard` | `wl_data_device`, `PRIMARY` and `CLIPBOARD` |
+| Read back | `PrintWindow` | view capture | `XGetImage` |
+
+The libraries a backend needs are resolved when the host is created, so importing
+this package adds no linker flag to a build. Which backend is compiled in is
+decided by the C compiler on the machine doing the building.
+
+## The interface
+
+| | |
+|:--|:--|
+| `App::new`, `App::close` | Connect to the desktop, or let go of it. |
+| `App::open(window_config~)` | Open a window. |
+| `App::poll`, `App::wait(timeout~)` | Take the next event, if there is one. |
+| `App::platform`, `App::scale` | Which desktop, and how many pixels a point is worth. |
+| `Window::present`, `Window::read_back` | Put a frame on screen, take one off it. |
+| `Window::size`, `Window::resize`, `Window::scale` | The client area, in physical pixels and in logical ones. |
+| `Window::set_title`, `Window::close` | The title bar, and the end of the window. |
+| `Window::clipboard`, `Window::set_clipboard` | Text, in and out. |
+| `Window::set_cursor` | The shape of the pointer over the window. |
+| `Window::set_ime_allowed`, `Window::set_ime_area` | Whether to compose text, and where the caret is. |
+| `Window::surface` | The native objects a GPU backend attaches to. |
+| `Frame`, `Rgba`, `Frame::to_host_order` | Pixels, and the byte order a desktop wants. |
+| `Key`, `Modifiers`, `MouseButton`, `Event` | What the desktop reports. |
+| `ScaleChanged`, `to_physical`, `to_logical`, `to_pixel` | The arithmetic between the two kinds of pixel. |
+
+`Key::from_windows`, `Key::from_keysym` and `Key::from_cocoa` are the three
+mappings from a platform's own key codes, for a backend written outside this
+package.
+
+## What it does not do
+
+- One `App` per thread. The desktops have one message queue per thread and this
+  library reads it.
+- Wayland has no request for a window to read itself back, and its text input
+  protocol is not implemented; composed text arrives through XIM on X11 and
+  through the window messages and the text system on the other two.
+- A transparent window is drawn per pixel on macOS and Wayland; Win32 keeps its
+  window opaque.
+- No GPU context: `Window::surface` hands out the native objects and stops there.

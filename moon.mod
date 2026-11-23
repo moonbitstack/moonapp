@@ -1,15 +1,36 @@
-name = "moonbitstack/CHANGE-ME"
+name = "moonbitstack/moonapp"
 
 version = "0.1.0"
 
 readme = "README.md"
 
-repository = "https://github.com/moonbitstack/CHANGE-ME"
+repository = "https://github.com/moonbitstack/moonapp"
 
 license = "Apache-2.0"
 
-keywords = [ "moonbit", "CHANGE-ME" ]
+keywords = [
+  "window",
+  "windowing",
+  "event-loop",
+  "event",
+  "native",
+  "desktop",
+  "win32",
+  "cocoa",
+  "appkit",
+  "wayland",
+  "x11",
+  "clipboard",
+  "ime",
+  "input-method",
+  "hidpi",
+  "frame",
+  "rgba",
+  "gui",
+  "host",
+  "moonapp",
+]
 
-description = "One sentence saying what this is and what it is not."
+description = "Native windows and an event loop for desktop hosts: open a window, pump input, put an RGBA frame on screen."
 
 source = "src"

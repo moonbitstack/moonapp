@@ -1,12 +1,347 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "moonbitstack/CHANGE-ME"
+package "moonbitstack/moonapp"
+
+import {
+  "moonbitlang/core/debug",
+}
 
 // Values
-pub fn greet(StringView) -> String
+pub let fixed_window_config : WindowConfig
+
+pub fn frame_buffer(Int32, Int32) -> FixedArray[Byte]
+
+pub let rgba_black : Rgba
+
+pub let rgba_transparent : Rgba
+
+pub let rgba_white : Rgba
+
+pub fn scale_from_dpi(Double) -> Double
+
+pub fn to_extent(Double) -> Int32
+
+pub fn to_logical(Double, Double) -> Double
+
+pub fn to_physical(Double, Double) -> Double
+
+pub fn to_pixel(Double) -> Int32
+
+pub let window_config : WindowConfig
 
 // Errors
+#derive(@debug.Debug)
+pub(all) suberror AppError {
+  Unavailable(String)
+  Refused(String)
+  Malformed(String)
+}
 
 // Types and methods
+#derive(Eq, @debug.Debug)
+pub(all) enum Cursor {
+  Default
+  Pointer
+  Text
+  Crosshair
+  Move
+  NotAllowed
+  Wait
+  Progress
+  Help
+  ResizeNS
+  ResizeEW
+  ResizeNESW
+  ResizeNWSE
+  Grab
+  Grabbing
+  Zoom
+  Cell
+  AllScroll
+  ColResize
+  RowResize
+  Hidden
+}
+
+#derive(@debug.Debug)
+pub(all) enum Event {
+  Resized(Int32, Int32)
+  ScaleChanged(Double)
+  Focused(Bool)
+  CloseRequested
+  KeyDown(KeyEvent)
+  KeyUp(KeyEvent)
+  Text(String)
+  Ime(Ime)
+  PointerMoved(Double, Double)
+  PointerEntered
+  PointerLeft
+  ButtonDown(MouseButton)
+  ButtonUp(MouseButton)
+  Wheel(WheelDelta)
+  Gesture(Gesture)
+}
+
+#derive(@debug.Debug)
+pub(all) struct Frame {
+  width : Int32
+  height : Int32
+  pixels : FixedArray[Byte]
+}
+pub fn Frame::at(Self, Int32, Int32) -> Rgba
+pub fn Frame::fill(Self, Rgba) -> Unit
+pub fn Frame::fill_rect(Self, Int32, Int32, Int32, Int32, Rgba) -> Unit
+pub fn Frame::from_host_order(Int32, Int32, Int32, FixedArray[Byte], blue_first? : Bool, top_down? : Bool) -> Self
+pub fn Frame::from_rgba(Int32, Int32, FixedArray[Byte]) -> Self
+pub fn Frame::get(Self, Int32, Int32) -> Rgba
+pub fn Frame::is_empty(Self) -> Bool
+pub fn Frame::new(Int32, Int32) -> Self
+pub fn Frame::set(Self, Int32, Int32, Rgba) -> Unit
+pub fn Frame::to_host_order(Self, blue_first? : Bool, premultiply? : Bool, top_down? : Bool) -> FixedArray[Byte]
+
+#derive(@debug.Debug)
+pub(all) enum Gesture {
+  Magnify(Double)
+  Rotate(Double)
+}
+
+#derive(@debug.Debug)
+pub(all) enum Ime {
+  Enabled
+  Preedit(String, cursor~ : Int32, anchor~ : Int32)
+  Commit(String)
+  Disabled
+}
+
+#derive(Eq, @debug.Debug)
+pub(all) enum Key {
+  Unknown(Int32)
+  A
+  B
+  C
+  D
+  E
+  F
+  G
+  H
+  I
+  J
+  K
+  L
+  M
+  N
+  O
+  P
+  Q
+  R
+  S
+  T
+  U
+  V
+  W
+  X
+  Y
+  Z
+  Digit0
+  Digit1
+  Digit2
+  Digit3
+  Digit4
+  Digit5
+  Digit6
+  Digit7
+  Digit8
+  Digit9
+  Minus
+  Equal
+  BracketLeft
+  BracketRight
+  Backslash
+  Semicolon
+  Quote
+  Backquote
+  Comma
+  Period
+  Slash
+  Escape
+  Enter
+  Tab
+  Space
+  Backspace
+  Delete
+  Insert
+  Home
+  End
+  PageUp
+  PageDown
+  Left
+  Right
+  Up
+  Down
+  ShiftLeft
+  ShiftRight
+  ControlLeft
+  ControlRight
+  AltLeft
+  AltRight
+  MetaLeft
+  MetaRight
+  CapsLock
+  NumLock
+  ScrollLock
+  Fn
+  F1
+  F2
+  F3
+  F4
+  F5
+  F6
+  F7
+  F8
+  F9
+  F10
+  F11
+  F12
+  F13
+  F14
+  F15
+  F16
+  F17
+  F18
+  F19
+  F20
+  F21
+  F22
+  F23
+  F24
+  Numpad0
+  Numpad1
+  Numpad2
+  Numpad3
+  Numpad4
+  Numpad5
+  Numpad6
+  Numpad7
+  Numpad8
+  Numpad9
+  NumpadAdd
+  NumpadSubtract
+  NumpadMultiply
+  NumpadDivide
+  NumpadDecimal
+  NumpadEnter
+  PrintScreen
+  Pause
+  ContextMenu
+}
+pub fn Key::from_cocoa(Int32) -> Self
+pub fn Key::from_keysym(Int32) -> Self
+pub fn Key::from_platform(Platform, Int32) -> Self
+pub fn Key::from_windows(Int32) -> Self
+
+#derive(Eq, @debug.Debug)
+pub(all) struct KeyEvent {
+  key : Key
+  repeat : Bool
+  modifiers : Modifiers
+}
+
+#derive(Eq, @debug.Debug)
+pub(all) struct Modifiers {
+  shift : Bool
+  control : Bool
+  alt : Bool
+  meta : Bool
+  caps_lock : Bool
+  num_lock : Bool
+}
+pub fn Modifiers::from_bits(Int32) -> Self
+pub fn Modifiers::is_empty(Self) -> Bool
+pub fn Modifiers::to_bits(Self) -> Int32
+
+#derive(Eq, @debug.Debug)
+pub(all) enum MouseButton {
+  Left
+  Right
+  Middle
+  Back
+  Forward
+  Other(Int32)
+}
+
+#derive(Eq, @debug.Debug)
+pub(all) enum Platform {
+  Windows
+  Macos
+  X11
+  Wayland
+  Other
+}
+pub fn Platform::from_code(Int32) -> Self
+
+#derive(Eq, @debug.Debug)
+pub(all) struct Rgba {
+  r : UInt32
+  g : UInt32
+  b : UInt32
+  a : UInt32
+}
+pub fn Rgba::new(Int32, Int32, Int32, Int32) -> Self
+pub fn Rgba::solid(Int32, Int32, Int32) -> Self
+
+#derive(Eq, @debug.Debug)
+pub(all) enum Side {
+  Left
+  Right
+}
+
+#derive(Eq, @debug.Debug)
+pub(all) struct Surface {
+  kind : SurfaceKind
+  first : UInt64
+  second : UInt64
+}
+
+#derive(Eq, @debug.Debug)
+pub(all) enum SurfaceKind {
+  None
+  Win32
+  Cocoa
+  X11
+  Wayland
+}
+
+#derive(@debug.Debug)
+pub(all) struct WheelDelta {
+  x : Double
+  y : Double
+  unit : WheelUnit
+}
+
+#derive(Eq, @debug.Debug)
+pub(all) enum WheelUnit {
+  Line
+  Pixel
+}
+
+#derive(@debug.Debug)
+pub(all) struct WindowConfig {
+  title : String
+  width : Int32
+  height : Int32
+  min_width : Int32
+  min_height : Int32
+  resizable : Bool
+  decorations : Bool
+  transparent : Bool
+  visible : Bool
+  high_dpi : Bool
+  app_id : String
+}
+
+#derive(Eq, Hash, @debug.Debug)
+pub(all) struct WindowId {
+  value : Int32
+}
 
 // Type aliases
 
