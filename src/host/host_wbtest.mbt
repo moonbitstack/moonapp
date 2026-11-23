@@ -141,6 +141,15 @@ test "a frame put on a window reads back from it" {
   guard rig(@moonapp.window_config) is Some(rig) else { return }
   let frame = quadrant_frame(rig.width, rig.height)
   rig.window.present(frame)
+  // Wayland has no request for a window to read itself back; the backend says
+  // so rather than inventing one.
+  if rig.app.platform() == @moonapp.Wayland {
+    let refused = Ok(rig.window.read_back()) catch { error => Err(error) }
+    assert_eq(refused is Err(_), true)
+    rig.window.close()
+    rig.app.close()
+    return
+  }
   let back = rig.window.read_back() catch { _ => abort("read_back failed") }
   assert_eq(back.width, rig.width)
   assert_eq(back.height, rig.height)
@@ -186,7 +195,13 @@ test "a key press and its text reach the application" {
     @moonapp.Macos => 0x00
     _ => 0x61
   }
-  let _ = test_key(rig.host, rig.id, code, 1)
+  // A compositor does not let one client put events into another's queue, so
+  // there is nothing to drive on Wayland.
+  if test_key(rig.host, rig.id, code, 1) == 0 {
+    rig.window.close()
+    rig.app.close()
+    return
+  }
   let down = expect_event(rig, fn(event) {
     match event {
       @moonapp.KeyDown(key) =>
@@ -195,10 +210,18 @@ test "a key press and its text reach the application" {
     }
   })
   assert_eq(down is Some(_), true)
-  let _ = test_text(rig.host, rig.id, 0x41)
+  // X11 and Wayland make the text out of the key press itself; the other two
+  // desktops send it as a message of its own, which is what the hook posts.
+  let expected = match rig.app.platform() {
+    @moonapp.Windows | @moonapp.Macos => {
+      let _ = test_text(rig.host, rig.id, 0x41)
+      "A"
+    }
+    _ => "a"
+  }
   let text = expect_event(rig, fn(event) {
     match event {
-      @moonapp.Text(text) => text == "A"
+      @moonapp.Text(text) => text == expected
       _ => false
     }
   })
@@ -219,7 +242,11 @@ test "a key press and its text reach the application" {
 ///|
 test "the pointer and the wheel reach the application" {
   guard rig(@moonapp.window_config) is Some(rig) else { return }
-  let _ = test_pointer(rig.host, rig.id, 0, 40, 30, 0)
+  if test_pointer(rig.host, rig.id, 0, 40, 30, 0) == 0 {
+    rig.window.close()
+    rig.app.close()
+    return
+  }
   let moved = expect_event(rig, fn(event) {
     match event {
       @moonapp.PointerMoved(x, y) => x == 40.0 && y == 30.0
