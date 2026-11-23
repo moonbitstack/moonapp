@@ -77,6 +77,8 @@ fn pump(app : @host.App, window : @host.Window) -> String raise @moonapp.AppErro
   `Key`, insert `Event::Text` into the document.
 - A frame must be the size of the client area (`Window::size`) or it is clipped.
   `Frame` holds straight alpha, top row first; the backend converts it.
-- `Window::read_back` reads the window as a frame, except on Wayland, where the
-  protocol has no such request and it raises `AppError::Unavailable`.
+- `Window::read_back` reads the window as a frame. Win32 and X11 ask the desktop
+  for the window's content, macOS hands back the pixels the window was given,
+  and on Wayland, where the protocol has no such request, it raises
+  `AppError::Unavailable`.
 - Call `App::close` when done. `Window::close` alone leaves the connection open.
