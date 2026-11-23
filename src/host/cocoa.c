@@ -78,6 +78,11 @@ static CGImageRef (*p_CGImageCreate)(size_t, size_t, size_t, size_t, size_t,
                                      int);
 static void (*p_CGImageRelease)(CGImageRef);
 static void (*p_CGDataProviderRelease)(CGDataProviderRef);
+static void (*p_CGContextSaveGState)(void *);
+static void (*p_CGContextRestoreGState)(void *);
+static void (*p_CGContextTranslateCTM)(void *, double, double);
+static void (*p_CGContextScaleCTM)(void *, double, double);
+static void (*p_CGContextDrawImage)(void *, CGRect, CGImageRef);
 
 static void *runtime_library;
 static void *appkit_library;
@@ -125,6 +130,16 @@ static int32_t load_cocoa(void) {
   *(void **)(&p_CGImageRelease) = dlsym(coregraphics_library, "CGImageRelease");
   *(void **)(&p_CGDataProviderRelease) =
       dlsym(coregraphics_library, "CGDataProviderRelease");
+  *(void **)(&p_CGContextSaveGState) =
+      dlsym(coregraphics_library, "CGContextSaveGState");
+  *(void **)(&p_CGContextRestoreGState) =
+      dlsym(coregraphics_library, "CGContextRestoreGState");
+  *(void **)(&p_CGContextTranslateCTM) =
+      dlsym(coregraphics_library, "CGContextTranslateCTM");
+  *(void **)(&p_CGContextScaleCTM) =
+      dlsym(coregraphics_library, "CGContextScaleCTM");
+  *(void **)(&p_CGContextDrawImage) =
+      dlsym(coregraphics_library, "CGContextDrawImage");
   return p_CGImageCreate != NULL;
 }
 
@@ -260,12 +275,20 @@ static void view_draw_rect(id self, SEL _cmd, CGRect rect) {
   (void)rect;
   moonapp_host *host = the_host;
   moonapp_win *win = host == NULL ? NULL : window_of_view(host, self);
-  if (win == NULL) return;
-  /* The image is the frame: the layer holds it, and drawing is only what makes
-   * the view have any content of its own. */
-  if (win->layer != NULL && win->image != NULL) {
-    SEND1(void, win->layer, "setContents:", win->image);
-  }
+  if (win == NULL || win->image == NULL) return;
+  id context = SEND0(id, p_objc_getClass("NSGraphicsContext"),
+                     "currentContext");
+  if (context == NULL) return;
+  void *cg = SEND0(void *, context, "CGContext");
+  if (cg == NULL) return;
+  CGRect bounds = send_rect0(self, "bounds");
+  /* The layer shows the frame on screen; drawing it here is what puts it in the
+   * view's own content, which is what a capture of the view reads. */
+  p_CGContextSaveGState(cg);
+  p_CGContextTranslateCTM(cg, 0, bounds.size.height);
+  p_CGContextScaleCTM(cg, 1, -1);
+  p_CGContextDrawImage(cg, bounds, win->image);
+  p_CGContextRestoreGState(cg);
 }
 
 static BOOL_ view_is_flipped(id self, SEL _cmd) {

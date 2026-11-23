@@ -346,7 +346,12 @@ pub fn Window::present(self : Window, frame : @moonapp.Frame) -> Unit {
   if frame.is_empty() {
     return
   }
-  let bgra = frame.to_host_order()
+  // CoreGraphics and Wayland both want the colour already multiplied by alpha.
+  let premultiplied = match self.app.platform {
+    @moonapp.Macos | @moonapp.Wayland => true
+    _ => false
+  }
+  let bgra = frame.to_host_order(premultiply=premultiplied)
   let _ = present(
     self.app.host,
     self.id.value,
