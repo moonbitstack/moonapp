@@ -55,7 +55,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libx11-dev xvfb weston
+          sudo apt-get install -y --no-install-recommends xvfb weston
 
       - name: a window on X11, a frame put on it and read back, and input that reaches it
         if: runner.os == 'Linux'
