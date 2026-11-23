@@ -1,0 +1,12 @@
+import {
+  "moonbitstack/moonapp",
+  "moonbitstack/moonapp/host",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "native"
+
+options(
+  targets: { "main.mbt": [ "native" ] },
+)

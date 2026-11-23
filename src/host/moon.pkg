@@ -10,5 +10,5 @@ import {
 supported_targets = "native"
 
 options(
-  "native-stub": [ "win32.c", "x11.c", "wayland.c", "linux.c" ],
+  "native-stub": [ "win32.c", "x11.c", "wayland.c", "cocoa.c", "linux.c" ],
 )

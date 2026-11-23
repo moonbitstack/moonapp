@@ -49,12 +49,49 @@ jobs:
       - name: moon test (all backends)
         run: moon test --target all
 
+      # A window needs a desktop. X11 comes from Xvfb, Wayland from a headless
+      # compositor; the other two runners have one already.
+      - name: a desktop to open a window on
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libx11-dev xvfb weston
+
+      - name: a window on X11, a frame put on it and read back, and input that reaches it
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a -s "-screen 0 1280x1024x24" \
+            env MOONAPP_BACKEND=x11 MOONAPP_LIVE=1 \
+            moon test --target native -p moonbitstack/moonapp/host
+
+      - name: a window on Wayland, and a frame committed to the compositor
+        if: runner.os == 'Linux'
+        run: |
+          export XDG_RUNTIME_DIR="$(mktemp -d)"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          weston --backend=headless-backend.so --socket=wayland-moonapp \
+                 --width=1024 --height=768 >/dev/null 2>&1 &
+          weston_pid=$!
+          trap 'kill $weston_pid 2>/dev/null' EXIT
+          for _ in $(seq 1 60); do
+            [ -S "$XDG_RUNTIME_DIR/wayland-moonapp" ] && break
+            sleep 0.25
+          done
+          WAYLAND_DISPLAY=wayland-moonapp MOONAPP_BACKEND=wayland MOONAPP_LIVE=1 \
+            moon test --target native -p moonbitstack/moonapp/host
+
+      - name: a window on the desktop, a frame put on it and read back
+        if: runner.os != 'Linux'
+        env:
+          MOONAPP_LIVE: "1"
+        run: moon test --target native -p moonbitstack/moonapp/host
+
       - name: examples run
         if: runner.os == 'Linux'
         run: |
           for dir in src/examples/*/; do
             if grep -q 'kind: "executable"' "$dir/moon.pkg" && ! grep -q 'supported_targets = "js"' "$dir/moon.pkg"; then
-              moon run "$dir" --target native > /dev/null
+              xvfb-run -a timeout 60 moon run "$dir" --target native > /dev/null
             fi
           done
 

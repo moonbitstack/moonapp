@@ -237,6 +237,7 @@ pub fn Key::from_cocoa(Int32) -> Self
 pub fn Key::from_keysym(Int32) -> Self
 pub fn Key::from_platform(Platform, Int32) -> Self
 pub fn Key::from_windows(Int32) -> Self
+pub fn Key::name(Self) -> String
 
 #derive(Eq, @debug.Debug)
 pub(all) struct KeyEvent {

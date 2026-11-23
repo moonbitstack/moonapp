@@ -134,12 +134,13 @@ size.
 | Frame | DIB section and `BitBlt` | `CALayer` contents | `wl_shm`, `XPutImage` |
 | Input | window messages | `NSEvent` | `wl_keyboard`, X11 events |
 | Composed text | `WM_IME_COMPOSITION` | input method of the text system | XIM |
-| Clipboard | `CF_UNICODETEXT` | `NSPasteboard` | `wl_data_device`, `PRIMARY` and `CLIPBOARD` |
+| Clipboard | `CF_UNICODETEXT` | `NSPasteboard` | `PRIMARY` and `CLIPBOARD` |
 | Read back | `PrintWindow` | view capture | `XGetImage` |
 
 The libraries a backend needs are resolved when the host is created, so importing
-this package adds no linker flag to a build. Which backend is compiled in is
-decided by the C compiler on the machine doing the building.
+this package adds no linker flag to a build. On Linux both backends are compiled
+in: one binary speaks to either desktop, and picks by `MOONAPP_BACKEND` (`x11` or
+`wayland`), then by `WAYLAND_DISPLAY`, then by whichever one answers.
 
 ## The interface
 
@@ -157,7 +158,7 @@ decided by the C compiler on the machine doing the building.
 | `Window::set_ime_allowed`, `Window::set_ime_area` | Whether to compose text, and where the caret is. |
 | `Window::surface` | The native objects a GPU backend attaches to. |
 | `Frame`, `Rgba`, `Frame::to_host_order` | Pixels, and the byte order a desktop wants. |
-| `Key`, `Modifiers`, `MouseButton`, `Event` | What the desktop reports. |
+| `Key`, `Key::name`, `Modifiers`, `MouseButton`, `Event` | What the desktop reports. |
 | `ScaleChanged`, `to_physical`, `to_logical`, `to_pixel` | The arithmetic between the two kinds of pixel. |
 
 `Key::from_windows`, `Key::from_keysym` and `Key::from_cocoa` are the three
@@ -168,9 +169,13 @@ package.
 
 - One `App` per thread. The desktops have one message queue per thread and this
   library reads it.
-- Wayland has no request for a window to read itself back, and its text input
-  protocol is not implemented; composed text arrives through XIM on X11 and
-  through the window messages and the text system on the other two.
+- Wayland has no request for a window to read itself back, no way for one client
+  to inject input into another, no text input protocol here and no clipboard
+  transfer here: text is composed through XIM on X11 and through the window
+  messages and the text system on the other two, and the clipboard is a
+  round trip through the compositor only on the desktops that offer one.
+- A pointer shape on Wayland comes from a protocol of its own that not every
+  compositor has, so the pointer keeps whatever shape the compositor gave it.
 - A transparent window is drawn per pixel on macOS and Wayland; Win32 keeps its
   window opaque.
 - No GPU context: `Window::surface` hands out the native objects and stops there.
