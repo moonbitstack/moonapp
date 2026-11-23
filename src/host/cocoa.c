@@ -597,7 +597,8 @@ double moonapp_primary_scale(void *raw) {
   if (raw == NULL) return 1.0;
   id screen = SEND0(id, p_objc_getClass("NSScreen"), "mainScreen");
   if (screen == NULL) return 1.0;
-  double scale = (double)(intptr_t)SEND0(NSInteger, screen, "backingScaleFactor");
+  double scale = ((double(*)(id, SEL))p_objc_msgSend)(screen,
+                                                     node("backingScaleFactor"));
   return scale > 0.0 ? scale : 1.0;
 }
 
@@ -871,7 +872,8 @@ double moonapp_scale(void *raw, int32_t window) {
   moonapp_host *host = (moonapp_host *)raw;
   moonapp_win *win = host == NULL ? NULL : find_window(host, window);
   if (win == NULL) return 1.0;
-  double scale = (double)(intptr_t)SEND0(NSInteger, win->window, "backingScaleFactor");
+  double scale =
+      ((double(*)(id, SEL))p_objc_msgSend)(win->window, node("backingScaleFactor"));
   if (scale > 0.0) win->scale = scale;
   return win->scale;
 }
