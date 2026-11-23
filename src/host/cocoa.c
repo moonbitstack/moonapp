@@ -954,8 +954,12 @@ int32_t moonapp_read_back(void *raw, int32_t window, uint8_t *out, int32_t cap) 
   CGRect bounds = send_rect0(win->view, "bounds");
   id rep = ((id(*)(id, SEL, CGRect))p_objc_msgSend)(
       win->view, node("bitmapImageRepForCachingDisplayInRect:"), bounds);
-  fprintf(stderr, "[dbg] rep=%p bounds=%.0fx%.0f\n", (void *)rep,
-          bounds.size.width, bounds.size.height);
+  CGRect frame = send_rect0(win->view, "frame");
+  fprintf(stderr,
+          "[dbg] rep=%p bounds=%.0fx%.0f frame=%.0fx%.0f winframe=%.0fx%.0f\n",
+          (void *)rep, bounds.size.width, bounds.size.height, frame.size.width,
+          frame.size.height, send_rect0(win->window, "frame").size.width,
+          send_rect0(win->window, "frame").size.height);
   if (rep == NULL) return -1;
   ((void(*)(id, SEL, CGRect, id))p_objc_msgSend)(
       win->view, node("cacheDisplayInRect:toBitmapImageRep:"), bounds, rep);
