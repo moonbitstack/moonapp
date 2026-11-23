@@ -1016,12 +1016,17 @@ int32_t moonapp_read_back(void *raw, int32_t window, uint8_t *out, int32_t cap) 
   CGRect area = { { 0, 0 }, { (double)width, (double)height } };
   p_CGContextDrawImage(context, area, win->image);
   {
-    size_t at = ((size_t)(height / 4) * (size_t)width + (size_t)(width * 3 / 4)) * 4;
-    size_t src = ((size_t)(height / 4) * (size_t)width + (size_t)(width / 4)) * 4;
-    fprintf(stderr, "[dbg] %dx%d image(1/4,1/4)=%u,%u,%u,%u drew(3/4,1/4)=%u,%u,%u,%u\n",
-            width, height, win->pixels[src], win->pixels[src + 1],
-            win->pixels[src + 2], win->pixels[src + 3], pixels[at],
-            pixels[at + 1], pixels[at + 2], pixels[at + 3]);
+    const int32_t xs[2] = { width / 4, width * 3 / 4 };
+    const int32_t ys[2] = { height / 4, height * 3 / 4 };
+    for (int32_t row = 0; row < 2; row++) {
+      for (int32_t col = 0; col < 2; col++) {
+        size_t i = ((size_t)ys[row] * (size_t)width + (size_t)xs[col]) * 4;
+        fprintf(stderr, "[dbg] (%d,%d) image=%u,%u,%u,%u drew=%u,%u,%u,%u\n",
+                xs[col], ys[row], win->pixels[i], win->pixels[i + 1],
+                win->pixels[i + 2], win->pixels[i + 3], pixels[i],
+                pixels[i + 1], pixels[i + 2], pixels[i + 3]);
+      }
+    }
   }
   p_CGContextRelease(context);
   /* A bitmap context counts its rows from the bottom and a frame from the top. */
