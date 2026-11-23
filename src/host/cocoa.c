@@ -511,6 +511,11 @@ static void view_resized(id self, SEL _cmd, CGSize size) {
 
 /* The class the runtime builds: a plain view with the messages above. */
 static Class make_view_class(void) {
+  /* A class is registered once for the life of a process, so a second
+   * application in the same process is given the class the first one made
+   * rather than a second class of the same name, which the runtime refuses. */
+  static Class made = NULL;
+  if (made != NULL) return made;
   Class base = p_objc_getClass("NSView");
   Class view = p_objc_allocateClassPair(base, "MoonappView", 0);
   if (view == NULL) return NULL;
@@ -547,6 +552,7 @@ static Class make_view_class(void) {
   p_class_addMethod(view, node("setFrameSize:"), (void *)view_resized,
                     "v@:{CGSize=dd}");
   p_objc_registerClassPair(view);
+  made = view;
   return view;
 }
 
