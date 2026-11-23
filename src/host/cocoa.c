@@ -61,6 +61,13 @@ static Class (*p_objc_allocateClassPair)(Class, const char *, size_t);
 static void (*p_objc_registerClassPair)(Class);
 static int (*p_class_addMethod)(Class, SEL, void *, const char *);
 static Class (*p_object_getClass)(id);
+static Class (*p_class_getSuperclass)(Class);
+static void (*p_objc_msgSendSuper)(void *, SEL, ...);
+
+typedef struct {
+  id receiver;
+  Class super_class;
+} MoonappSuper;
 
 static CGColorSpaceRef (*p_CGColorSpaceCreateDeviceRGB)(void);
 static CGDataProviderRef (*p_CGDataProviderCreateWithData)(void *, const void *,
@@ -94,6 +101,9 @@ static int32_t load_cocoa(void) {
       dlsym(runtime_library, "objc_registerClassPair");
   *(void **)(&p_class_addMethod) = dlsym(runtime_library, "class_addMethod");
   *(void **)(&p_object_getClass) = dlsym(runtime_library, "object_getClass");
+  *(void **)(&p_class_getSuperclass) =
+      dlsym(runtime_library, "class_getSuperclass");
+  *(void **)(&p_objc_msgSendSuper) = dlsym(runtime_library, "objc_msgSendSuper");
   if (p_objc_msgSend == NULL || p_objc_getClass == NULL ||
       p_sel_registerName == NULL) {
     return 0;
@@ -470,8 +480,12 @@ static void view_exit(id self, SEL _cmd, id event) {
   if (win != NULL) push_event(host, MOONAPP_EV_POINTER_LEFT, win->id);
 }
 
-static void view_resized(id self, SEL _cmd) {
-  (void)_cmd;
+static void view_resized(id self, SEL _cmd, CGSize size) {
+  /* The setter was overridden to notice the change; the view still has to be
+   * told, or it keeps the size it was made with. */
+  MoonappSuper parent = { self, p_class_getSuperclass(p_object_getClass(self)) };
+  ((void(*)(MoonappSuper *, SEL, CGSize))p_objc_msgSendSuper)(&parent, _cmd,
+                                                             size);
   moonapp_host *host = the_host;
   moonapp_win *win = host == NULL ? NULL : window_of_view(host, self);
   if (win == NULL) return;
