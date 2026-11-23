@@ -1015,6 +1015,14 @@ int32_t moonapp_read_back(void *raw, int32_t window, uint8_t *out, int32_t cap) 
   }
   CGRect area = { { 0, 0 }, { (double)width, (double)height } };
   p_CGContextDrawImage(context, area, win->image);
+  {
+    size_t at = ((size_t)(height / 4) * (size_t)width + (size_t)(width * 3 / 4)) * 4;
+    size_t src = ((size_t)(height / 4) * (size_t)width + (size_t)(width / 4)) * 4;
+    fprintf(stderr, "[dbg] %dx%d image(1/4,1/4)=%u,%u,%u,%u drew(3/4,1/4)=%u,%u,%u,%u\n",
+            width, height, win->pixels[src], win->pixels[src + 1],
+            win->pixels[src + 2], win->pixels[src + 3], pixels[at],
+            pixels[at + 1], pixels[at + 2], pixels[at + 3]);
+  }
   p_CGContextRelease(context);
   /* A bitmap context counts its rows from the bottom and a frame from the top. */
   for (int32_t y = 0; y < height; y++) {
